@@ -7,8 +7,14 @@ This directory contains a Zig SDK implementation for LinuxDoSpace mail stream pr
 - `Client`, `Suffix`, `MailMessage`
 - Errors: authentication/stream failures
 - Full listener queue API
-- Local bind (exact/regex), ordered chain, overlap control
+- Local bind (exact/pattern), ordered chain, overlap control
 - `route`, `close`
+
+## Transport Note
+
+- The current `start()` implementation uses the system `curl` binary to read the HTTPS NDJSON stream.
+- This makes the Zig SDK operational without depending on unstable `std.http` APIs, but it also means `curl` must exist on the target machine.
+- Pattern matching is currently a lightweight matcher, not a full general-purpose regex engine.
 
 ## Local Verification Status
 

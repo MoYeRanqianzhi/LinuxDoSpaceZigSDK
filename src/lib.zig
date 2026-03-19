@@ -261,11 +261,46 @@ pub const Client = struct {
     }
 
     pub fn start(self: *Client) !void {
-        // Network reading is environment-specific for Zig stdlib version.
-        // This function keeps the API contract and can be wired to a concrete
-        // HTTP NDJSON reader by feeding each line into ingestNdjsonLine().
+        if (self.closed) return;
+
+        const auth_header = try std.fmt.allocPrint(self.allocator, "Authorization: Bearer {s}", .{self.token});
+        defer self.allocator.free(auth_header);
+        const stream_url = try std.fmt.allocPrint(self.allocator, "{s}/v1/token/email/stream", .{self.base_url});
+        defer self.allocator.free(stream_url);
+
+        var child = std.process.Child.init(&[_][]const u8{
+            "curl",
+            "-fsSL",
+            "-N",
+            "-H",
+            auth_header,
+            "-H",
+            "Accept: application/x-ndjson",
+            stream_url,
+        }, self.allocator);
+        child.stdout_behavior = .Pipe;
+        child.stderr_behavior = .Pipe;
+
+        try child.spawn();
+        defer {
+            if (!self.closed) {
+                _ = child.kill() catch {};
+            }
+            _ = child.wait() catch {};
+        }
+
+        const stdout = child.stdout orelse return LinuxDoSpaceError.StreamFailed;
+        var reader = stdout.reader();
+
         while (!self.closed) {
-            std.time.sleep(300 * std.time.ns_per_ms);
+            const line_opt = try reader.readUntilDelimiterOrEofAlloc(self.allocator, '\n', 1024 * 1024);
+            defer if (line_opt) |line| self.allocator.free(line);
+            const line = line_opt orelse break;
+            const trimmed = std.mem.trim(u8, line, "\r\n\t ");
+            if (trimmed.len == 0) {
+                continue;
+            }
+            try self.ingestNdjsonLine(trimmed);
         }
     }
 };
