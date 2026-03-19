@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: zig-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Zig
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl xz-utils python3
+          python3 - <<'PY' > /tmp/zig-url.txt
+          import json
+          import urllib.request
+
+          with urllib.request.urlopen("https://ziglang.org/download/index.json") as response:
+            data = json.load(response)
+
+          versions = []
+          for key in data:
+            if key == "master":
+              continue
+            parts = tuple(int(piece) for piece in key.split("."))
+            versions.append((parts, key))
+
+          _, latest = max(versions)
+          print(data[latest]["x86_64-linux"]["tarball"])
+          PY
+          zig_url="$(cat /tmp/zig-url.txt)"
+          curl -fsSL "${zig_url}" -o /tmp/zig.tar.xz
+          mkdir -p /tmp/zig
+          tar -xf /tmp/zig.tar.xz -C /tmp/zig --strip-components=1
+          echo "/tmp/zig" >> "${GITHUB_PATH}"
+
+      - name: Build package
+        run: zig build
