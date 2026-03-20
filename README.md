@@ -10,6 +10,11 @@ This directory contains a Zig SDK implementation for LinuxDoSpace mail stream pr
 - Local bind (exact/pattern), ordered chain, overlap control
 - `route`, `close`
 
+Important:
+
+- `Suffix.linuxdo_space` is semantic, not literal
+- the SDK resolves it to `<owner_username>.linuxdo.space` after `ready.owner_username`
+
 ## Transport Note
 
 - The current `start()` implementation uses the system `curl` binary to read the HTTPS NDJSON stream.

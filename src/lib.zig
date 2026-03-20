@@ -1,6 +1,9 @@
 const std = @import("std");
 
 pub const Suffix = struct {
+    // linuxdo_space is semantic rather than literal: bindings resolve against
+    // "<owner_username>.linuxdo.space" after the ready event provides
+    // owner_username.
     pub const linuxdo_space = "linuxdo.space";
 };
 
@@ -108,6 +111,7 @@ pub const Client = struct {
     allocator: std.mem.Allocator,
     token: []const u8,
     base_url: []const u8,
+    owner_username: ?[]const u8 = null,
     closed: bool = false,
     full_queue: std.ArrayList(MailMessage),
     bindings: std.StringHashMap(std.ArrayList(Binding)),
@@ -133,6 +137,9 @@ pub const Client = struct {
         self.full_queue.deinit();
         self.allocator.free(self.token);
         self.allocator.free(self.base_url);
+        if (self.owner_username) |value| {
+            self.allocator.free(value);
+        }
     }
 
     pub fn bind(self: *Client, prefix: ?[]const u8, pattern: ?[]const u8, suffix: []const u8, allow_overlap: bool) !*MailBox {
@@ -167,8 +174,12 @@ pub const Client = struct {
         var iter = parts;
         const local_part = iter.next() orelse return;
         const suffix = iter.next() orelse return;
-        if (self.bindings.getPtr(suffix)) |chain| {
-            for (chain.items) |binding| {
+        var chain: ?*std.ArrayList(Binding) = self.bindings.getPtr(suffix);
+        if (chain == null and self.owner_username != null and isSemanticNamespaceSuffix(self, suffix)) {
+            chain = self.bindings.getPtr(Suffix.linuxdo_space);
+        }
+        if (chain) |resolved_chain| {
+            for (resolved_chain.items) |binding| {
                 if (!binding.matches(local_part)) continue;
                 try out.append(binding.mailbox);
                 if (!binding.allow_overlap) break;
@@ -191,7 +202,16 @@ pub const Client = struct {
         defer parsed.deinit();
         const root = parsed.value;
         const t = root.object.get("type") orelse return LinuxDoSpaceError.StreamFailed;
-        if (std.mem.eql(u8, t.string, "ready") or std.mem.eql(u8, t.string, "heartbeat")) return;
+        if (std.mem.eql(u8, t.string, "ready")) {
+            const owner_node = root.object.get("owner_username") orelse return LinuxDoSpaceError.StreamFailed;
+            if (owner_node != .string or owner_node.string.len == 0) return LinuxDoSpaceError.StreamFailed;
+            if (self.owner_username) |existing| {
+                self.allocator.free(existing);
+            }
+            self.owner_username = try self.allocator.dupe(u8, owner_node.string);
+            return;
+        }
+        if (std.mem.eql(u8, t.string, "heartbeat")) return;
         if (!std.mem.eql(u8, t.string, "mail")) return;
 
         const raw_node = root.object.get("raw_message_base64") orelse return LinuxDoSpaceError.StreamFailed;
@@ -338,6 +358,14 @@ pub const Client = struct {
         }
     }
 };
+
+fn isSemanticNamespaceSuffix(client: *Client, suffix: []const u8) bool {
+    const owner_username = client.owner_username orelse return false;
+    if (!std.mem.startsWith(u8, suffix, owner_username)) return false;
+    if (suffix.len <= owner_username.len + 1) return false;
+    if (suffix[owner_username.len] != '.') return false;
+    return std.mem.eql(u8, suffix[owner_username.len + 1 ..], Suffix.linuxdo_space);
+}
 
 fn regexLikeMatch(input: []const u8, pattern: []const u8) bool {
     // Lightweight fallback matcher for SDK portability:
