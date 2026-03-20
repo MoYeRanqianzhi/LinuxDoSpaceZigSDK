@@ -255,7 +255,28 @@ pub const Client = struct {
                 .raw_bytes = message.raw_bytes,
             }, &route_result);
             for (route_result.items) |mb| {
-                try mb.enqueue(message);
+                const per_recipient_message = MailMessage{
+                    .address = try self.allocator.dupe(u8, addr),
+                    .sender = message.sender,
+                    .recipients = message.recipients,
+                    .received_at = message.received_at,
+                    .subject = message.subject,
+                    .message_id = message.message_id,
+                    .date = message.date,
+                    .from_header = message.from_header,
+                    .to_header = message.to_header,
+                    .cc_header = message.cc_header,
+                    .reply_to_header = message.reply_to_header,
+                    .from_addresses = message.from_addresses,
+                    .to_addresses = message.to_addresses,
+                    .cc_addresses = message.cc_addresses,
+                    .reply_to_addresses = message.reply_to_addresses,
+                    .text = message.text,
+                    .html = message.html,
+                    .raw = message.raw,
+                    .raw_bytes = message.raw_bytes,
+                };
+                try mb.enqueue(per_recipient_message);
             }
         }
     }
@@ -283,10 +304,9 @@ pub const Client = struct {
 
         try child.spawn();
         defer {
-            if (!self.closed) {
+            if (self.closed) {
                 _ = child.kill() catch {};
             }
-            _ = child.wait() catch {};
         }
 
         const stdout = child.stdout orelse return LinuxDoSpaceError.StreamFailed;
@@ -301,6 +321,20 @@ pub const Client = struct {
                 continue;
             }
             try self.ingestNdjsonLine(trimmed);
+        }
+
+        const exit_result = try child.wait();
+        switch (exit_result) {
+            .Exited => |code| {
+                if (code != 0 and !self.closed) {
+                    return LinuxDoSpaceError.StreamFailed;
+                }
+            },
+            else => {
+                if (!self.closed) {
+                    return LinuxDoSpaceError.StreamFailed;
+                }
+            },
         }
     }
 };
