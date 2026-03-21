@@ -1,0 +1,4 @@
+interface:
+  display_name: "LinuxDoSpace Zig SDK"
+  short_description: "Use or maintain the LinuxDoSpace Zig SDK"
+  default_prompt: "Use $linuxdo-space-zig-sdk when writing consumer code against sdk/zig or when updating the LinuxDoSpace Zig SDK with matching docs and validation guidance."
