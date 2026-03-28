@@ -13,7 +13,12 @@ This directory contains a Zig SDK implementation for LinuxDoSpace mail stream pr
 Important:
 
 - `Suffix.linuxdo_space` is semantic, not literal
-- the SDK resolves it to `<owner_username>.linuxdo.space` after `ready.owner_username`
+- `Suffix.linuxdo_space` now resolves to the current token owner's canonical
+  mail namespace: `<owner_username>-mail.linuxdo.space`
+- the legacy default alias `<owner_username>.linuxdo.space` still matches the
+  default semantic binding automatically
+- consumer code should keep using `Suffix.linuxdo_space` instead of hardcoding
+  a concrete `*-mail.linuxdo.space` namespace
 
 ## Transport Note
 

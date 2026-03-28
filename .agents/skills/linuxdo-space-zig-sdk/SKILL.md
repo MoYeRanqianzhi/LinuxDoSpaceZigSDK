@@ -24,7 +24,10 @@ Read [references/development.md](references/development.md) only when editing `s
    - `prefix` and `pattern` are mutually exclusive
    - exact and pattern bindings share one ordered chain per suffix
    - `allow_overlap=false` stops at the first match; `true` continues
-   - `Suffix.linuxdo_space` is semantic and resolves to `<owner_username>.linuxdo.space`
+   - `Suffix.linuxdo_space` is semantic and resolves to the canonical
+     `<owner_username>-mail.linuxdo.space`
+   - the legacy default alias `<owner_username>.linuxdo.space` still matches
+     the default semantic binding automatically
    - current pattern support is regex-like fallback matching, not a full regex engine
    - remote `base_url` must use `https://`; only localhost forms may use `http://`
 4. Keep `README.md`, `build.zig`, `src/lib.zig`, and workflows aligned when behavior changes.

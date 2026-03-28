@@ -29,8 +29,10 @@ must provide `curl`.
 - `try client.bind(...)` registers local exact or pattern mailbox bindings.
 - A mailbox starts receiving only after `try mailbox.listenStart()`.
 - `mailbox.listenNext()` drains the mailbox queue one item at a time.
-- `Suffix.linuxdo_space` resolves to `<owner_username>.linuxdo.space` after the
-  `ready` event.
+- `Suffix.linuxdo_space` resolves to `<owner_username>-mail.linuxdo.space`
+  after the `ready` event.
+- the legacy default alias `<owner_username>.linuxdo.space` still matches the
+  default semantic binding automatically.
 - Exact and pattern bindings share one ordered chain per suffix.
 - `allow_overlap=false` stops at the first local match; `true` continues.
 - Pattern matching is currently lightweight and regex-like, not a general regex

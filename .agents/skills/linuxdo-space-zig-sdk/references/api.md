@@ -44,8 +44,10 @@
 - `MailBox.listenNext()` drains the mailbox queue and returns `null` when it is
   empty.
 - `allow_overlap=false` breaks on the first match in the ordered suffix chain.
-- `Suffix.linuxdo_space` is semantic and falls back to
-  `<owner_username>.linuxdo.space` after the `ready` event is received.
+- `Suffix.linuxdo_space` is semantic and resolves to
+  `<owner_username>-mail.linuxdo.space` after the `ready` event is received.
+- the legacy default alias `<owner_username>.linuxdo.space` still matches the
+  default semantic binding automatically.
 - `regexLikeMatch(...)` currently supports `.*`, exact match, `abc.*`,
   `.*abc`, and `.*abc.*`. It is not a full regex engine.
 - Remote `http://` base URLs are rejected unless the host is localhost,

@@ -1,9 +1,9 @@
 const std = @import("std");
 
 pub const Suffix = struct {
-    // linuxdo_space is semantic rather than literal: bindings resolve against
-    // "<owner_username>.linuxdo.space" after the ready event provides
-    // owner_username.
+    // linuxdo_space is semantic rather than literal: bindings resolve it to
+    // the current token owner's canonical `@<owner>-mail.linuxdo.space`
+    // namespace once the stream ready event provides owner_username.
     pub const linuxdo_space = "linuxdo.space";
 };
 
@@ -146,25 +146,26 @@ pub const Client = struct {
         const has_prefix = prefix != null and prefix.?.len > 0;
         const has_pattern = pattern != null and pattern.?.len > 0;
         if (has_prefix == has_pattern) return LinuxDoSpaceError.InvalidArgument;
+        const resolved_suffix = try self.resolveBindingSuffix(suffix);
 
         const mode = if (has_prefix) "exact" else "pattern";
         var mailbox = try self.allocator.create(MailBox);
-        mailbox.* = MailBox.init(self.allocator, mode, suffix, allow_overlap, prefix, pattern);
+        mailbox.* = MailBox.init(self.allocator, mode, resolved_suffix, allow_overlap, prefix, pattern);
 
         const binding = Binding{
             .mode = mode,
-            .suffix = suffix,
+            .suffix = resolved_suffix,
             .allow_overlap = allow_overlap,
             .prefix = prefix,
             .pattern_text = if (has_pattern) pattern.? else null,
             .mailbox = mailbox,
         };
-        if (self.bindings.getPtr(suffix)) |list| {
+        if (self.bindings.getPtr(resolved_suffix)) |list| {
             try list.append(binding);
         } else {
             var list = std.ArrayList(Binding).init(self.allocator);
             try list.append(binding);
-            try self.bindings.put(try self.allocator.dupe(u8, suffix), list);
+            try self.bindings.put(try self.allocator.dupe(u8, resolved_suffix), list);
         }
         return mailbox;
     }
@@ -176,7 +177,9 @@ pub const Client = struct {
         const suffix = iter.next() orelse return;
         var chain: ?*std.ArrayList(Binding) = self.bindings.getPtr(suffix);
         if (chain == null and self.owner_username != null and isSemanticNamespaceSuffix(self, suffix)) {
-            chain = self.bindings.getPtr(Suffix.linuxdo_space);
+            const canonical_suffix = try std.fmt.allocPrint(self.allocator, "{s}-mail.{s}", .{ self.owner_username.?, Suffix.linuxdo_space });
+            defer self.allocator.free(canonical_suffix);
+            chain = self.bindings.getPtr(canonical_suffix);
         }
         if (chain) |resolved_chain| {
             for (resolved_chain.items) |binding| {
@@ -357,14 +360,30 @@ pub const Client = struct {
             },
         }
     }
+
+    fn resolveBindingSuffix(self: *Client, suffix: []const u8) ![]const u8 {
+        const normalized_suffix = std.ascii.allocLowerString(self.allocator, std.mem.trim(u8, suffix, " \r\n\t")) catch return LinuxDoSpaceError.InvalidArgument;
+        errdefer self.allocator.free(normalized_suffix);
+        if (normalized_suffix.len == 0) {
+            return LinuxDoSpaceError.InvalidArgument;
+        }
+        if (!std.mem.eql(u8, normalized_suffix, Suffix.linuxdo_space)) {
+            return normalized_suffix;
+        }
+        const owner_username = self.owner_username orelse return LinuxDoSpaceError.StreamFailed;
+        self.allocator.free(normalized_suffix);
+        return try std.fmt.allocPrint(self.allocator, "{s}-mail.{s}", .{ owner_username, Suffix.linuxdo_space });
+    }
 };
 
 fn isSemanticNamespaceSuffix(client: *Client, suffix: []const u8) bool {
     const owner_username = client.owner_username orelse return false;
-    if (!std.mem.startsWith(u8, suffix, owner_username)) return false;
-    if (suffix.len <= owner_username.len + 1) return false;
-    if (suffix[owner_username.len] != '.') return false;
-    return std.mem.eql(u8, suffix[owner_username.len + 1 ..], Suffix.linuxdo_space);
+    const semantic_default = std.fmt.allocPrint(client.allocator, "{s}.{s}", .{ owner_username, Suffix.linuxdo_space }) catch return false;
+    defer client.allocator.free(semantic_default);
+    if (std.ascii.eqlIgnoreCase(suffix, semantic_default)) return true;
+    const semantic_mail = std.fmt.allocPrint(client.allocator, "{s}-mail.{s}", .{ owner_username, Suffix.linuxdo_space }) catch return false;
+    defer client.allocator.free(semantic_mail);
+    return std.ascii.eqlIgnoreCase(suffix, semantic_mail);
 }
 
 fn regexLikeMatch(input: []const u8, pattern: []const u8) bool {
